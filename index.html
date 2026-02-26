@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Terror en el Bosque - HTML 3D</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        #ui { position: absolute; bottom: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px #000; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; background: white; border-radius: 50%; transform: translate(-50%, -50%); opacity: 0.5; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <p><b>WASD</b>: Mover | <b>CTRL</b>: Agacharse | <b>E</b>: Entrar/Salir Armario</p>
+    <p id="status">Estado: Explorando</p>
+</div>
+<div id="crosshair"></div>
+
+<script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+
+    // --- CONFIGURACIÓN ESCENA ---
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x050505, 0.15); // Niebla de bosque nocturno
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // --- ILUMINACIÓN ---
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.5); // Luz ambiental tenue
+    scene.add(ambientLight);
+
+    const flashLight = new THREE.SpotLight(0xffffff, 10);
+    flashLight.angle = Math.PI / 6;
+    flashLight.penumbra = 0.3;
+    camera.add(flashLight);
+    flashLight.position.set(0, 0, 1);
+    flashLight.target = new THREE.Object3D();
+    camera.add(flashLight.target);
+    flashLight.target.position.set(0, 0, -5);
+    scene.add(camera);
+
+    // --- SUELO Y ENTORNO ---
+    const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(100, 100),
+        new THREE.MeshStandardMaterial({ color: 0x112211 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
+
+    // Árboles (Cilindros simples)
+    for(let i=0; i<50; i++) {
+        const tree = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.5, 0.7, 5),
+            new THREE.MeshStandardMaterial({ color: 0x221100 })
+        );
+        tree.position.set(Math.random()*40-20, 2.5, Math.random()*40-20);
+        scene.add(tree);
+    }
+
+    // --- EL ARMARIO ---
+    const closet = new THREE.Group();
+    const box = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, 3, 1),
+        new THREE.MeshStandardMaterial({ color: 0x442200 })
+    );
+    closet.add(box);
+    closet.position.set(0, 1.5, -5);
+    scene.add(closet);
+
+    // --- LÓGICA DE JUGADOR ---
+    let isCrouching = false;
+    let isHidden = false;
+    let moveSpeed = 0.1;
+    const keys = {};
+
+    window.addEventListener('keydown', (e) => { 
+        keys[e.code] = true;
+        if(e.code === 'ControlLeft') isCrouching = true;
+        if
