@@ -2,20 +2,28 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Terror en el Bosque - HTML 3D</title>
+    <title>Bosque de Terror 3D</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-        #ui { position: absolute; bottom: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px #000; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; background: white; border-radius: 50%; transform: translate(-50%, -50%); opacity: 0.5; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; }
+        #instrucciones {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: white; text-align: center; background: rgba(0,0,0,0.8);
+            padding: 20px; border: 2px solid red; cursor: pointer; z-index: 10;
+        }
+        #ui { position: absolute; bottom: 20px; left: 20px; color: #f00; font-weight: bold; }
+        #mira { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: white; border-radius: 50%; }
     </style>
 </head>
 <body>
 
-<div id="ui">
-    <p><b>WASD</b>: Mover | <b>CTRL</b>: Agacharse | <b>E</b>: Entrar/Salir Armario</p>
-    <p id="status">Estado: Explorando</p>
+<div id="instrucciones">
+    <h1>ECOS EN EL BOSQUE</h1>
+    <p>Haz CLIC para empezar</p>
+    <p>(WASD: Mover | CTRL: Agacharse | E: Esconderse | RATÓN: Mirar)</p>
 </div>
-<div id="crosshair"></div>
+
+<div id="ui">ESTADO: EXPLORANDO</div>
+<div id="mira"></div>
 
 <script type="importmap">
     { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
@@ -24,64 +32,150 @@
 <script type="module">
     import * as THREE from 'three';
 
-    // --- CONFIGURACIÓN ESCENA ---
+    // --- VARIABLES DE ESTADO ---
+    let moviendo = false;
+    let agachado = false;
+    let escondido = false;
+    const teclas = {};
+    
+    // --- ESCENA Y CÁMARA ---
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x050505, 0.15); // Niebla de bosque nocturno
+    scene.background = new THREE.Color(0x020202);
+    scene.fog = new THREE.FogExp2(0x020202, 0.15);
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // --- ILUMINACIÓN ---
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.5); // Luz ambiental tenue
-    scene.add(ambientLight);
-
-    const flashLight = new THREE.SpotLight(0xffffff, 10);
-    flashLight.angle = Math.PI / 6;
-    flashLight.penumbra = 0.3;
-    camera.add(flashLight);
-    flashLight.position.set(0, 0, 1);
-    flashLight.target = new THREE.Object3D();
-    camera.add(flashLight.target);
-    flashLight.target.position.set(0, 0, -5);
+    // --- LUZ (LINTERNA) ---
+    const linterna = new THREE.SpotLight(0xffffff, 5);
+    linterna.angle = Math.PI / 6;
+    linterna.penumbra = 0.5;
+    linterna.decay = 2;
+    linterna.distance = 20;
+    camera.add(linterna);
+    linterna.position.set(0, 0, 0);
+    linterna.target.position.set(0, 0, -1);
+    camera.add(linterna.target);
     scene.add(camera);
 
-    // --- SUELO Y ENTORNO ---
-    const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(100, 100),
-        new THREE.MeshStandardMaterial({ color: 0x112211 })
+    // --- ESCENARIO ---
+    const suelo = new THREE.Mesh(
+        new THREE.PlaneGeometry(200, 200),
+        new THREE.MeshStandardMaterial({ color: 0x050505 })
     );
-    floor.rotation.x = -Math.PI / 2;
-    scene.add(floor);
+    suelo.rotation.x = -Math.PI / 2;
+    scene.add(suelo);
 
-    // Árboles (Cilindros simples)
-    for(let i=0; i<50; i++) {
-        const tree = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.5, 0.7, 5),
-            new THREE.MeshStandardMaterial({ color: 0x221100 })
+    // Generar árboles simples
+    for(let i=0; i<80; i++) {
+        const arbol = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.2, 0.4, 8),
+            new THREE.MeshStandardMaterial({ color: 0x1a0f00 })
         );
-        tree.position.set(Math.random()*40-20, 2.5, Math.random()*40-20);
-        scene.add(tree);
+        arbol.position.set(Math.random()*100-50, 4, Math.random()*100-50);
+        scene.add(arbol);
     }
 
-    // --- EL ARMARIO ---
-    const closet = new THREE.Group();
-    const box = new THREE.Mesh(
+    // ARMARIO
+    const armario = new THREE.Mesh(
         new THREE.BoxGeometry(1.5, 3, 1),
-        new THREE.MeshStandardMaterial({ color: 0x442200 })
+        new THREE.MeshStandardMaterial({ color: 0x331a00 })
     );
-    closet.add(box);
-    closet.position.set(0, 1.5, -5);
-    scene.add(closet);
+    armario.position.set(0, 1.5, -10);
+    scene.add(armario);
 
-    // --- LÓGICA DE JUGADOR ---
-    let isCrouching = false;
-    let isHidden = false;
-    let moveSpeed = 0.1;
-    const keys = {};
+    // MONSTRUO (Cubo rojo acechante)
+    const monstruo = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 3, 1),
+        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    );
+    monstruo.position.set(20, 1.5, -20);
+    scene.add(monstruo);
 
+    // --- CONTROLES DE RATÓN (LOOK) ---
+    let yaw = 0, pitch = 0;
+    document.addEventListener('mousemove', (e) => {
+        if (document.pointerLockElement === document.body) {
+            yaw -= e.movementX * 0.002;
+            pitch -= e.movementY * 0.002;
+            pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+            camera.rotation.set(pitch, yaw, 0, 'YXZ');
+        }
+    });
+
+    // Bloqueo de ratón al hacer clic
+    const instrucc = document.getElementById('instrucciones');
+    instrucc.addEventListener('click', () => {
+        document.body.requestPointerLock();
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+        instrucc.style.display = document.pointerLockElement === document.body ? 'none' : 'block';
+    });
+
+    // --- CONTROLES TECLADO ---
     window.addEventListener('keydown', (e) => { 
-        keys[e.code] = true;
-        if(e.code === 'ControlLeft') isCrouching = true;
-        if
+        teclas[e.code] = true; 
+        if(e.code === 'KeyE') intentarEsconderse();
+    });
+    window.addEventListener('keyup', (e) => { teclas[e.code] = false; });
+
+    function intentarEsconderse() {
+        const dist = camera.position.distanceTo(armario.position);
+        if(dist < 3) {
+            escondido = !escondido;
+            document.getElementById('ui').innerText = escondido ? "ESTADO: ESCONDIDO (SEGURO)" : "ESTADO: EXPLORANDO";
+            if(escondido) camera.position.set(armario.position.x, 1.6, armario.position.z);
+        }
+    }
+
+    // --- LOOP DE ANIMACIÓN ---
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        if (!escondido && document.pointerLockElement === document.body) {
+            // Agacharse
+            agachado = teclas['ControlLeft'];
+            const alturaObjetivo = agachado ? 0.8 : 1.7;
+            camera.position.y += (alturaObjetivo - camera.position.y) * 0.1;
+
+            // Movimiento
+            const speed = agachado ? 0.03 : 0.08;
+            const dir = new THREE.Vector3();
+            if (teclas['KeyW']) dir.z -= 1;
+            if (teclas['KeyS']) dir.z += 1;
+            if (teclas['KeyA']) dir.x -= 1;
+            if (teclas['KeyD']) dir.x += 1;
+            
+            dir.applyQuaternion(camera.quaternion);
+            dir.y = 0; // No volar
+            camera.position.add(dir.multiplyScalar(speed));
+
+            // IA del Monstruo (Te sigue lento)
+            const distAlJugador = monstruo.position.distanceTo(camera.position);
+            if(distAlJugador < 15) {
+                const movMonstruo = new THREE.Vector3().subVectors(camera.position, monstruo.position).normalize();
+                monstruo.position.add(movMonstruo.multiplyScalar(0.04));
+            }
+
+            // Muerte
+            if(distAlJugador < 1.5) {
+                alert("TE ENCONTRÓ.");
+                location.reload();
+            }
+        }
+
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>
